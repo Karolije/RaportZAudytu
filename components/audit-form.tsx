@@ -1,15 +1,16 @@
+import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import React, { useState } from 'react';
-import { Button, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Button, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 interface Question {
   id: number;
   text: string;
   answer: boolean | null; // Tak/Nie/null
   note: string;
-  images: string[]; // będą base64
+  images: string[]; // base64
 }
 
 export default function AuditChecklist() {
@@ -40,6 +41,31 @@ export default function AuditChecklist() {
     setQuestions(prev =>
       prev.map(q => (q.id === id ? { ...q, note: text } : q))
     );
+  }
+
+  // Poprawione zapisywanie do Supabase
+  async function saveToSupabase() {
+    try {
+      const payload = questions.map(q => ({
+        question_text: q.text,
+        answer: q.answer,
+        note: q.note,
+        images: q.images, // jeśli masz kolumnę typu text[] lub jsonb w Supabase
+      }));
+
+      const { data, error } = await supabase.from('pytania').insert(payload);
+
+      if (error) {
+        console.log('Błąd zapisu:', error);
+        Alert.alert('Błąd', 'Nie udało się zapisać do Supabase: ' + error.message);
+      } else {
+        console.log('Zapisano:', data);
+        Alert.alert('Sukces', 'Zapisano do Supabase!');
+      }
+    } catch (err) {
+      console.log('Exception:', err);
+      Alert.alert('Błąd', 'Wystąpił nieoczekiwany błąd.');
+    }
   }
 
   // Generowanie PDF
@@ -98,6 +124,8 @@ export default function AuditChecklist() {
       ))}
 
       <Button title="GENERUJ PDF" onPress={generatePDF} />
+      <Button title="Zapisz do Supabase" onPress={saveToSupabase} />
+
     </ScrollView>
   );
 }
@@ -120,3 +148,9 @@ const styles = StyleSheet.create({
   imagesRow: { flexDirection: 'row', marginTop: 10 },
   image: { width: 80, height: 80, borderRadius: 8, marginRight: 10 },
 });
+
+async function testSupabase() {
+  const { data, error } = await supabase.from('pytania').select('*').limit(1)
+  console.log('Test Supabase:', data, error)
+}
+testSupabase()
