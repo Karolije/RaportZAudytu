@@ -1,11 +1,13 @@
 import AuditForm from '@/components/audit-form';
 import { ThemedView } from '@/components/themed-view';
-import { StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 
 export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
-      <AuditForm />
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <AuditForm />
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -13,6 +15,11 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#fff', // albo dopasuj do motywu
+  },
+  scrollContent: {
     padding: 16,
+    flexGrow: 1,
+    justifyContent: 'center', // wycentruje formularz jeśli ekran większy
   },
 });

@@ -1,98 +1,122 @@
 import * as ImagePicker from 'expo-image-picker';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import React, { useState } from 'react';
-import { Alert, Button, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Button, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-// Tutaj w przyszłości podłączymy bibliotekę PDF
-// import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-
-type Question = {
+interface Question {
   id: number;
   text: string;
-  images: string[];
-  answer: string;
-};
+  answer: boolean | null; // Tak/Nie/null
+  note: string;
+  images: string[]; // będą base64
+}
 
-const QUESTIONS: Question[] = Array.from({ length: 10 }, (_, i) => ({
-  id: i + 1,
-  text: `Pytanie ${i + 1}`,
-  images: [],
-  answer: '',
-}));
+export default function AuditChecklist() {
+  const [questions, setQuestions] = useState<Question[]>([
+    { id: 1, text: 'Czy dokumentacja jest kompletna?', answer: null, note: '', images: [] },
+    { id: 2, text: 'Czy sprzęt działa prawidłowo?', answer: null, note: '', images: [] },
+    { id: 3, text: 'Czy miejsce pracy jest czyste?', answer: null, note: '', images: [] },
+  ]);
 
-export default function AuditForm() {
-  const [questions, setQuestions] = useState<Question[]>(QUESTIONS);
-
-  const pickImage = async (questionId: number) => {
-    if (!(await ImagePicker.requestMediaLibraryPermissionsAsync()).granted) {
-      Alert.alert('Brak dostępu', 'Nie masz uprawnień do galerii zdjęć.');
-      return;
-    }
-
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.5,
-    });
-
-    if (!result.canceled) {
+  // Dodawanie zdjęcia w formacie base64
+  async function addPhoto(id: number) {
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.7, base64: true });
+    if (!result.canceled && result.assets[0].base64) {
+      const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
       setQuestions(prev =>
-        prev.map(q =>
-          q.id === questionId
-            ? {
-                ...q,
-                images: q.images.length < 3 ? [...q.images, result.assets[0].uri] : q.images,
-              }
-            : q
-        )
+        prev.map(q => (q.id === id ? { ...q, images: [...q.images, base64] } : q))
       );
     }
-  };
+  }
 
-  const generatePDF = () => {
-    Alert.alert('PDF', 'Tutaj wygenerujemy PDF z odpowiedziami i zdjęciami.');
-    // Później tutaj wywołamy funkcję do tworzenia PDF
-  };
+  function setAnswer(id: number, value: boolean) {
+    setQuestions(prev =>
+      prev.map(q => (q.id === id ? { ...q, answer: value } : q))
+    );
+  }
+
+  function updateNote(id: number, text: string) {
+    setQuestions(prev =>
+      prev.map(q => (q.id === id ? { ...q, note: text } : q))
+    );
+  }
+
+  // Generowanie PDF
+  async function generatePDF() {
+    let html = '<h1>Raport Audytu</h1>';
+    questions.forEach(q => {
+      html += `<h3>${q.text}</h3>`;
+      html += `<p>Odpowiedź: ${q.answer === true ? 'Tak' : q.answer === false ? 'Nie' : 'Brak odpowiedzi'}</p>`;
+      if (q.note) html += `<p>Uwagi: ${q.note}</p>`;
+      if (q.images.length > 0) {
+        q.images.forEach(base64 => {
+          html += `<img src="${base64}" width="200" style="margin:5px 0;" />`;
+        });
+      }
+      html += '<hr />';
+    });
+
+    const { uri } = await Print.printToFileAsync({ html });
+    await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+  }
 
   return (
     <ScrollView style={styles.container}>
       {questions.map(q => (
         <View key={q.id} style={styles.questionContainer}>
           <Text style={styles.questionText}>{q.text}</Text>
-          <Button title="Dodaj zdjęcie" onPress={() => pickImage(q.id)} />
-          <View style={styles.imagesContainer}>
-            {q.images.map((uri, idx) => (
-              <Image key={idx} source={{ uri }} style={styles.image} />
+
+          <View style={styles.checkboxRow}>
+            <Pressable style={styles.checkboxContainer} onPress={() => setAnswer(q.id, true)}>
+              <View style={[styles.checkbox, q.answer === true && styles.checked]} />
+              <Text style={styles.checkboxLabel}>Tak</Text>
+            </Pressable>
+
+            <Pressable style={styles.checkboxContainer} onPress={() => setAnswer(q.id, false)}>
+              <View style={[styles.checkbox, q.answer === false && styles.checked]} />
+              <Text style={styles.checkboxLabel}>Nie</Text>
+            </Pressable>
+          </View>
+
+          <TextInput
+            placeholder="Wpisz własną uwagę..."
+            value={q.note}
+            onChangeText={text => updateNote(q.id, text)}
+            style={styles.input}
+            multiline
+          />
+
+          <Button title="Dodaj zdjęcie" onPress={() => addPhoto(q.id)} />
+
+          <View style={styles.imagesRow}>
+            {q.images.map((img, index) => (
+              <Image key={index} source={{ uri: img }} style={styles.image} />
             ))}
           </View>
         </View>
       ))}
-      <Button title="Generuj PDF" onPress={generatePDF} />
+
+      <Button title="GENERUJ PDF" onPress={generatePDF} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
+  container: { padding: 16 },
   questionContainer: {
-    marginBottom: 24,
+    marginBottom: 30,
     borderBottomWidth: 1,
     borderBottomColor: '#ccc',
     paddingBottom: 16,
   },
-  questionText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  imagesContainer: {
-    flexDirection: 'row',
-    marginTop: 8,
-    gap: 8,
-  },
-  image: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-  },
+  questionText: { fontSize: 18, marginBottom: 8 },
+  checkboxRow: { flexDirection: 'row', gap: 20, marginBottom: 8 },
+  checkboxContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  checkbox: { width: 24, height: 24, borderWidth: 1, borderColor: '#333', borderRadius: 4 },
+  checked: { backgroundColor: '#333' },
+  checkboxLabel: { fontSize: 16 },
+  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 10, marginBottom: 8 },
+  imagesRow: { flexDirection: 'row', marginTop: 10 },
+  image: { width: 80, height: 80, borderRadius: 8, marginRight: 10 },
 });
